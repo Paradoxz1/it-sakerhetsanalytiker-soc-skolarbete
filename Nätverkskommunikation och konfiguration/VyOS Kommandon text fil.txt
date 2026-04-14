@@ -1,0 +1,141 @@
+﻿VyOS – Fullständig Konfigurationsfil (Alla kommandon i ordning)
+Denna pdf innehåller alla kommandon som använts för att konfigurera nätverket, DHCP, DNS, NAT, brandvägg och VG‑förbättringar.
+1. Grundläggande Setup
+1.1 Tangentbordslayout
+configure
+set system option keyboard-layout se-latin1
+commit
+save
+exit
+2. Interface‑konfiguration
+2.1 WAN (eth0)
+configure
+set interfaces ethernet eth0 address dhcp
+set interfaces ethernet eth0 description 'WAN'
+2.2 LAN1 (eth1)
+set interfaces ethernet eth1 address 192.168.0.1/24
+set interfaces ethernet eth1 description 'LAN1'
+2.3 LAN2 (eth2)
+set interfaces ethernet eth2 address 192.168.1.1/24
+set interfaces ethernet eth2 description 'LAN2'
+commit
+save
+exit
+3. DHCP‑server
+3.1 LAN1 – 192.168.0.0/24
+configure
+set service dhcp-server shared-network-name LAN1 subnet 192.168.0.0/24 option default-router 192.168.0.1
+set service dhcp-server shared-network-name LAN1 subnet 192.168.0.0/24 option name-server 192.168.0.1
+set service dhcp-server shared-network-name LAN1 subnet 192.168.0.0/24 lease 86400
+set service dhcp-server shared-network-name LAN1 subnet 192.168.0.0/24 range 0 start 192.168.0.20
+set service dhcp-server shared-network-name LAN1 subnet 192.168.0.0/24 range 0 stop 192.168.0.50
+set service dhcp-server shared-network-name LAN1 subnet 192.168.0.0/24 subnet-id 1
+3.2 LAN2 – 192.168.1.0/24
+set service dhcp-server shared-network-name LAN2 subnet 192.168.1.0/24 option default-router 192.168.1.1
+set service dhcp-server shared-network-name LAN2 subnet 192.168.1.0/24 option name-server 192.168.1.1
+set service dhcp-server shared-network-name LAN2 subnet 192.168.1.0/24 lease 86400
+set service dhcp-server shared-network-name LAN2 subnet 192.168.1.0/24 range 0 start 192.168.1.20
+set service dhcp-server shared-network-name LAN2 subnet 192.168.1.0/24 range 0 stop 192.168.1.50
+set service dhcp-server shared-network-name LAN2 subnet 192.168.1.0/24 subnet-id 2
+commit
+save
+exit
+4. DNS‑Forwarding
+configure
+set service dns forwarding cache-size 0
+set service dns forwarding listen-address 192.168.0.1
+set service dns forwarding listen-address 192.168.1.1
+set service dns forwarding allow-from 192.168.0.0/24
+set service dns forwarding allow-from 192.168.1.0/24
+commit
+save
+exit
+5. NAT – Internetåtkomst
+5.1 LAN1 NAT
+configure
+set nat source rule 100 outbound-interface name eth0
+set nat source rule 100 source address 192.168.0.0/24
+set nat source rule 100 translation address masquerade
+5.2 LAN2 NAT
+set nat source rule 110 outbound-interface name eth0
+set nat source rule 110 source address 192.168.1.0/24
+set nat source rule 110 translation address masquerade
+commit
+save
+exit
+6. Avancerad Brandvägg
+6.1 Common Chain – Connection Tracking
+configure
+set firewall ipv4 name CONN_FILTER default-action 'return'
+set firewall ipv4 name CONN_FILTER rule 10 action 'accept'
+set firewall ipv4 name CONN_FILTER rule 10 state established 'enable'
+set firewall ipv4 name CONN_FILTER rule 10 state related 'enable'
+set firewall ipv4 name CONN_FILTER rule 20 action 'drop'
+set firewall ipv4 name CONN_FILTER rule 20 state invalid 'enable'
+6.2 WAN_LOCAL – Trafik från WAN till routern
+set firewall ipv4 name WAN_LOCAL default-action 'drop'
+set firewall ipv4 name WAN_LOCAL rule 10 action 'accept'
+set firewall ipv4 name WAN_LOCAL rule 10 protocol 'icmp'
+6.3 WAN_IN – Trafik från WAN genom routern
+set firewall ipv4 name WAN_IN default-action 'drop'
+6.4 LAN_LOCAL – Trafik från LAN till routern
+set firewall ipv4 name LAN_LOCAL default-action 'drop'
+set firewall ipv4 name LAN_LOCAL rule 10 action 'accept'
+set firewall ipv4 name LAN_LOCAL rule 10 protocol 'icmp'
+6.5 LAN_IN – Trafik från LAN genom routern
+set firewall ipv4 name LAN_IN default-action 'accept'
+6.6 Bind brandväggsregler till interfaces
+WAN (eth0)
+set interfaces ethernet eth0 firewall ipv4 local 'WAN_LOCAL'
+set interfaces ethernet eth0 firewall ipv4 forward 'WAN_IN'
+LAN1 (eth1)
+set interfaces ethernet eth1 firewall ipv4 local 'LAN_LOCAL'
+set interfaces ethernet eth1 firewall ipv4 forward 'LAN_IN'
+LAN2 (eth2)
+set interfaces ethernet eth2 firewall ipv4 local 'LAN_LOCAL'
+set interfaces ethernet eth2 firewall ipv4 forward 'LAN_IN'
+6.7 Jump‑rules för CONN_FILTER
+set firewall ipv4 input filter rule 10 action 'jump'
+set firewall ipv4 input filter rule 10 jump-target 'CONN_FILTER'
+set firewall ipv4 forward filter rule 10 action 'jump'
+set firewall ipv4 forward filter rule 10 jump-target 'CONN_FILTER'
+commit
+save
+exit
+7. VG‑Förbättringar brandvägg
+7.1 Rate‑limit ICMP (skydd mot ICMP‑flood)
+configure
+set firewall ipv4 name WAN_LOCAL rule 30 description 'Rate limit ICMP'
+set firewall ipv4 name WAN_LOCAL rule 30 action 'accept'
+set firewall ipv4 name WAN_LOCAL rule 30 protocol 'icmp'
+set firewall ipv4 name WAN_LOCAL rule 30 limit rate '10/second'
+7.2 Bogon‑filter (skydd mot IP‑spoofing)
+set firewall ipv4 name WAN_IN rule 40 description 'Drop RFC1918 from WAN'
+set firewall ipv4 name WAN_IN rule 40 action 'drop'
+set firewall ipv4 name WAN_IN rule 40 source address '10.0.0.0/8'
+set firewall ipv4 name WAN_IN rule 41 action 'drop'
+set firewall ipv4 name WAN_IN rule 41 source address '172.16.0.0/12'
+set firewall ipv4 name WAN_IN rule 42 action 'drop'
+set firewall ipv4 name WAN_IN rule 42 source address '192.168.0.0/16'
+7.3 Logging av droppad WAN‑trafik
+set firewall ipv4 name WAN_IN rule 5 description 'Log dropped WAN traffic'
+set firewall ipv4 name WAN_IN rule 5 action 'drop'
+set firewall ipv4 name WAN_IN rule 5 log 'enable'
+commit
+save
+exit
+8. VG‑Förbättringar Monitoring & Event‑Handling
+8.1 Monitoring – Telegraf (systemövervakning)
+configure
+set service monitoring telegraf enable
+set service monitoring telegraf output influxdb url 'http://192.168.0.10:8086'
+commit
+save
+exit
+8.2 Event‑Handler – Interface Down Detection
+configure
+set service event-handler interface-down event 'interface eth0 down'
+set service event-handler interface-down execute '/config/scripts/wan-down.sh'
+commit
+save
+exit
